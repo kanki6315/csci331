@@ -1,0 +1,617 @@
+%{
+#include<iostream>
+#include<string>
+#include "support.h"
+#include "compiler.h"
+using namespace std;
+
+int lineno = 1;
+
+typedef struct {
+        TreeNode * tnp;
+} tn;
+
+//#define YYDEBUG 1
+#define YYSTYPE tn
+#ifdef __cplusplus
+#undef __cplusplus
+#endif
+#define __cplusplus
+%}
+
+%token ID NUM INT VOID IF ELSE RET LE LT GT GE EQ NE
+
+%%
+/* This yacc file parses C- tokens and produces a tree.
+ * The tree is closer to a parse tree than a syntax tree
+ * for ease of use in the semantic checking and code
+ * generation phases. 
+
+ * tree node attributes are: 
+ *    Kind              kind;    // which tree node kind it is
+ *    int              numval;   // value if its a number
+ *    char *           strval;   // name if its an id
+ *    struct pnode *   ptr1;     // pointers to child tree nodes
+ *    struct pnode *   ptr2;
+ *    struct pnode *   ptr3;
+ *    int              line;     // line number the code was on
+*/
+
+/* 1. prog -> declList */
+prog : declList
+{
+  parseTree = new TreeNode();  /* Make a new tree node for it. */
+  parseTree->kind = prog1;         /* Set its kind from the enum types. */
+  parseTree->ptr1 = $1.tnp;            /* Point to the component nodes. */
+}
+;
+
+/* 2. declList -> decl declList | decl */
+declList : decl declList
+{
+  $$.tnp = new TreeNode();
+  $$.tnp->kind = declList1;
+  $$.tnp->ptr1 = $1.tnp;
+  $$.tnp->ptr2 = $2.tnp;
+}
+| decl
+{
+  $$.tnp = new TreeNode();
+  $$.tnp->kind = declList2;
+  $$.tnp->ptr1 = $1.tnp;
+}
+;
+
+/* 3. decl -> varDecl | funDecl */
+decl : varDecl
+{
+  $$.tnp = new TreeNode();
+  $$.tnp->kind = decl1;
+  $$.tnp->ptr1 = $1.tnp;
+}
+| funDecl
+{
+  $$.tnp = new TreeNode();
+  $$.tnp->kind = decl2;
+  $$.tnp->ptr1 = $1.tnp;
+}
+;
+
+/* 4. varDecl -> typeSpec ID ';' | typeSpec ID '[' NUM ']' ';' */
+varDecl : typeSpec ID ';'
+{
+  $$.tnp = $2.tnp;
+  $$.tnp->kind = varDecl1;
+  $$.tnp->ptr1 = $1.tnp;
+}
+| typeSpec ID '[' NUM ']' ';'
+{
+  $$.tnp = $2.tnp;
+  $$.tnp->kind = varDecl2;
+  $$.tnp->ptr1 = $1.tnp;
+  $$.tnp->numval = $4.tnp->numval;
+  free($4.tnp);
+}
+;
+
+/* 5. typeSpec -> INT | VOID */
+typeSpec : INT
+{ 
+  $$.tnp = new TreeNode();
+  $$.tnp->kind = typeSpec1;
+}
+| VOID
+{ $$.tnp = new TreeNode();
+  $$.tnp->kind = typeSpec2;
+}
+;
+
+/* 6. funDecl -> typeSpec ID '(' params ')' funStmt  */
+funDecl : typeSpec ID '(' params ')' funStmt
+{
+  $$.tnp = $2.tnp;
+  $$.tnp->kind = funDecl1;
+  $$.tnp->ptr1 = $1.tnp;
+  $$.tnp->ptr2 = $4.tnp;
+  $$.tnp->ptr3 = $6.tnp;
+}
+;
+
+/* 7. params -> paramList | VOID */
+params : paramList
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = params1;          /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| VOID
+{
+   $$.tnp = new TreeNode();    /* Set the node. */
+   $$.tnp->kind = params2;         /* Set the kind. */
+}
+;
+
+/* 8. paramList -> param ',' paramList | param */
+paramList : param ',' paramList
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = paramList1;       /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $3.tnp;
+}
+| param
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = paramList2;       /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 9. param -> typeSpec ID | typeSpec ID '[' ']' */
+param : typeSpec ID
+{
+  $$.tnp = $2.tnp;                     /* Set the node. */
+  $$.tnp->kind = param1;           /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| typeSpec ID '[' ']'
+{
+  $$.tnp = $2.tnp;                     /* Set the node. */
+  $$.tnp->kind = param2;           /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 10. funStmt -> '{' localDecl stmtList '}' */
+funStmt : '{' localDecl stmtList '}'
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = funStmt1;        /* Set the kind. */
+  $$.tnp->ptr1 = $2.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $3.tnp;
+}
+;
+
+/* 11. localDecl -> varDecl localDecl | nothing */
+localDecl : varDecl localDecl
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = localDecl1;       /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $2.tnp;
+}
+|
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = localDecl2;/* Set the kind. */
+}
+;
+
+/* 12. stmtList -> stmt stmtList | nothing */
+stmtList : stmt stmtList
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmtList1;        /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $2.tnp;
+}
+|
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmtList2;        /* Set the kind. */
+}
+;
+
+/* 13. stmt -> expStmt | compStmt | selStmt | retStmt */
+stmt : expStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt1;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| compStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt2;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| selStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt3;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| retStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt5;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 13a. e_stmt -> expStmt | compStmt | e_selStmt | retStmt */
+e_stmt : expStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt1;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| compStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt2;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| e_selStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt3;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| retStmt
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = stmt5;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 14. expStmt -> exp ';' | ';' */
+expStmt : exp ';'
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = expStmt1;         /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| ';'
+{
+  $$.tnp = new TreeNode(); /* Set the node. */
+  $$.tnp->kind = expStmt2; /* Set the kind. */
+  /* Set the pointers. */
+}
+;
+
+/* 15. compStmt -> '{' localDecl stmtList '}' */
+compStmt : '{' localDecl stmtList '}'
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = compStmt1;        /* Set the kind. */
+  $$.tnp->ptr1 = $2.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $3.tnp;
+}
+;
+
+/* 16. selStmt -> if '(' exp ')' stmt | if '(' exp ')' e_stmt else stmt */
+selStmt : IF '(' exp ')' stmt
+{
+  $$.tnp = new TreeNode(); /* Set the node. */
+  $$.tnp->kind = selStmt1; /* Set the kind. */
+  $$.tnp->ptr1 = $3.tnp; /* Set the pointers. */
+  $$.tnp->ptr2 = $5.tnp;
+}
+| IF '(' exp ')' e_stmt ELSE stmt
+{
+  $$.tnp = new TreeNode(); /* Set the node. */
+  $$.tnp->kind = selStmt2; /* Set the kind. */
+  $$.tnp->ptr1 = $3.tnp;   /* Set the pointers. */
+  $$.tnp->ptr2 = $5.tnp;
+  $$.tnp->ptr3 = $7.tnp;
+}
+;
+
+/* 16a. e_selStmt -> if '(' exp ')' e_stmt else stmt */
+e_selStmt : IF '(' exp ')' e_stmt ELSE e_stmt
+{
+  $$.tnp = new TreeNode(); /* Set the node. */
+  $$.tnp->kind = selStmt2; /* Set the kind. */
+  $$.tnp->ptr1 = $3.tnp;   /* Set the pointers. */
+  $$.tnp->ptr2 = $5.tnp;
+  $$.tnp->ptr3 = $7.tnp;
+}
+;
+
+/* 18. retStmt -> return ';' | return exp ';' */
+retStmt : RET ';'
+{
+  $$.tnp = new TreeNode(); /* Set the node. */
+  $$.tnp->kind = retStmt1; /* Set the kind. */
+}
+| RET exp ';'
+{
+  $$.tnp = new TreeNode(); /* Set the node. */
+  $$.tnp->kind = retStmt2; /* Set the kind. */
+  $$.tnp->ptr1 = $2.tnp;  /* Set the pointers. */
+}
+;
+
+/* 19. exp -> var '=' exp | simpExp */
+exp : var '=' exp
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = exp1;             /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $3.tnp;
+}
+| simpExp
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = exp2;             /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 20. var -> ID | ID '[' exp ']' */
+var : ID
+{
+  $$.tnp = $1.tnp;                     /* Set the node. */
+  $$.tnp->kind = var1;             /* Set the kind. */
+}
+| ID '[' exp ']'
+{
+  $$.tnp = $1.tnp;                     /* Set the node. */
+  $$.tnp->kind = var2;             /* Set the kind. */
+  $$.tnp->ptr1 = $3.tnp;               /* Set the pointers. */
+}
+;
+
+/* 21. simpExp -> addExp relop addExp | addExp */
+simpExp : addExp relop addExp
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = simpExp1;         /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $2.tnp;
+  $$.tnp->ptr3 = $3.tnp;
+}
+| addExp
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = simpExp2;         /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 22. relop -> '<' '=' | '<' | '>' | '>' '=' | '=' '=' | '!' '=' */
+relop : LE 
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = relop1; }      /* Set the kind. */  
+| LT  
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = relop2; }
+| GT  
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = relop3; }
+| GE  
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = relop4; }
+| EQ  
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = relop5; }
+| NE  
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = relop6; }
+;
+
+/* 23. addExp -> addExp addop term | term */
+addExp : addExp addop term
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = addExp1;          /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $2.tnp;
+  $$.tnp->ptr3 = $3.tnp;
+}
+| term 
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = addExp2;          /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 24. addop -> '+' | '-' */
+addop : '+' 
+{ 
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = addop1;     /* Set the kind. */
+}
+| '-'  
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = addop2; 
+}
+;
+
+/* 25. term -> term mulop factor | factor */
+term : term mulop factor
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = term1;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $2.tnp;
+  $$.tnp->ptr3 = $3.tnp;
+}
+| factor
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = term2;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+/* 26. mulop -> '*' | '/' */
+mulop : '*' 
+{ 
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = mulop1;           /* Set the kind. */ 
+}
+| '/'  
+{ 
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = mulop2; 
+}
+;
+
+/* 27. factor -> '(' exp ')' | var | call | NUM */
+factor : '(' exp ')'
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = factor1;          /* Set the kind. */
+  $$.tnp->ptr1 = $2.tnp;               /* Set the pointers. */
+}
+| var
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = factor2;          /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| call
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = factor3;          /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+| NUM
+{
+  $$.tnp = $1.tnp;                     /* Set the node. */
+  $$.tnp->kind = factor4;          /* Set the kind. */
+}
+;
+
+/* 28. call -> ID '(' args ')' */
+call : ID '(' args ')'
+{
+  $$.tnp = $1.tnp;                     /* Set the node. */
+  $$.tnp->kind = call1;            /* Set the kind. */
+  $$.tnp->ptr1 = $3.tnp;               /* Set the pointers. */
+}
+;
+
+/* 29. args -> argList | nothing */
+args : argList
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = args1;            /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+|
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = args2;            /* Set the kind. */
+}
+;
+
+/* 30. argList -> exp ',' argList | exp */
+argList : exp ',' argList
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = argList1;         /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+  $$.tnp->ptr2 = $3.tnp;
+}
+| exp
+{
+  $$.tnp = new TreeNode();     /* Set the node. */
+  $$.tnp->kind = argList2;         /* Set the kind. */
+  $$.tnp->ptr1 = $1.tnp;               /* Set the pointers. */
+}
+;
+
+%%
+
+#include "lex.yy.c"
+
+void yyerror(char const* s) {
+  fprintf(stderr,"Syntactic error!  Line %d, unexpected token ",lineno);
+  switch (yychar) {
+  case ';':  
+    fprintf(stderr,"\";\".\n");
+    break;
+  case '[':  
+    fprintf(stderr,"\"[\".\n");
+    break;
+  case ']':  
+    fprintf(stderr,"\"]\".\n");
+    break;
+  case '(':
+    fprintf(stderr,"\"(\".\n");
+    break;
+  case ')':
+    fprintf(stderr,"\")\".\n");
+    break;
+  case ',':
+    fprintf(stderr,"\",\".\n");
+    break;
+  case '{':
+    fprintf(stderr,"\"{\".\n");
+    break;
+  case '}':
+    fprintf(stderr,"\"{\".\n");
+    break;
+  case '=':
+    fprintf(stderr,"\"=\".\n");
+    break;
+  case LE:
+    fprintf(stderr,"\"<=\".\n");
+    break;
+  case LT:
+    fprintf(stderr,"\"<\".\n");
+    break;
+  case GT:
+    fprintf(stderr,"\">\".\n");
+    break;
+  case GE:
+    fprintf(stderr,"\">=\".\n");
+    break;
+  case EQ:
+    fprintf(stderr,"\"==\".\n");
+    break;
+  case NE:
+    fprintf(stderr,"\"!=\".\n");
+    break;
+  case '+':
+    fprintf(stderr,"\"+\".\n");
+    break;
+  case '-':
+    fprintf(stderr,"\"-\".\n");
+    break;
+  case '*':
+    fprintf(stderr,"\"*\".\n");
+    break;
+  case '/':
+    fprintf(stderr,"\"/\".\n");
+    break;
+  case INT:
+    fprintf(stderr,"\"int\".\n");
+    break;
+  case VOID:
+    fprintf(stderr,"\"void\".\n");
+    break;
+  case IF:
+    fprintf(stderr,"\"if\".\n");
+    break;
+  case ELSE:
+    fprintf(stderr,"\"else\".\n");
+    break;
+  case RET:
+    fprintf(stderr,"\"return\".\n");
+    break;
+  case ID:
+    cerr << yylval.tnp->strval << endl;
+    break;
+  case NUM:
+    fprintf(stderr,"\"%d\".\n",yylval.tnp->numval);
+    break;
+  default:	
+	fprintf(stderr,"\"%s\".\n",yytext);
+	
+  }
+  exit(1);
+}
+
