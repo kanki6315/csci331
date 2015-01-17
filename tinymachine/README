@@ -1,0 +1,30 @@
+The tiny machine simulator.
+To compile, type 
+  make
+
+To create the tiny machine which counts NOPs, uncomment the 
+  #define NOP_COUNT  // uncomment to produce NOPtm
+line at the top of tm.c
+
+To create the tiny machine which tracks the amount of memory used, 
+uncomment the 
+  #define MEM_LENGTH // uncomment to produce MEMtm
+line at the top of tm.c
+
+The executable will be named tm. You can rename it as you like.
+Executables for 64-bit Linux are in this folder, you need to compile it 
+again for a 32-bit machine. (Unlike Java, C makes no pretense at being 
+portable and must be recompiled for each OS/architecture it is run on).
+
+To use the tiny machine on a foo.tm file
+  tm foo.tm
+at the prompt, hit g or go to run the program. If it appears to get stuck, 
+it may be waiting for you to enter input. Hit h to see further commands 
+including those that track NOPs or memory length. Warning, NOP and memory 
+tracking may slow down the running of the tm a smidge, rendering any attempt
+at a timing test useless.
+
+The faster tiny machine (ftm) is a version of the tm which does not require 
+the environment. This simulator is meant to make rapid testing of your 
+compiler easier. Essentially, the operations of nop counting, instruction 
+counting, 'go', and 'quit' are done for you by default. 
